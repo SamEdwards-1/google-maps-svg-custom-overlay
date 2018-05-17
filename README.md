@@ -1,5 +1,7 @@
 # SVG Overlays for Google Maps Using Raphael.js
 
+![](https://github.com/connor11528/google-maps-svg-custom-overlay.git)
+
 This project serves as a proof of concept for embedding arbitrary SVG interactivity
 within Google Maps.
 
