@@ -63,7 +63,7 @@ var setupMapRaphael = function() {
         minZoom : zoom_min
     };
 
-    var map = new google.maps.Map(  jQuery('.map-container')[0],
+    var map = new google.maps.Map(  document.querySelector('.map-container'),
         mapOptions
     );
 
@@ -87,78 +87,77 @@ RaphaelOverlayView = function(data, map) {
     this.data_ = data;
     this.map_ = map;
     this.svg_ = null;
+    this.div_ = null;
+    this.bounds_ = null;
     this.isOverlayInit = false;
     this.markers = [];
     this.setMap(map);
 };
 
 RaphaelOverlayView.prototype = new google.maps.OverlayView();
-RaphaelOverlayView.prototype.initOverlay = function() {
-    this.isOverlayInit = true;
-    var latLongBounds = this.map_.getBounds();
-    var overlayProjection = this.getProjection();
-    var swPoint = overlayProjection.fromLatLngToDivPixel(latLongBounds.getSouthWest());
-    var nePoint = overlayProjection.fromLatLngToDivPixel(latLongBounds.getNorthEast());
-    var div = document.createElement('div');
-    div.classList.add('svg-overlay-container');
-    div.style.width = '100%';
-    div.style.borderWidth = '0px';
-    div.style.position = 'absolute';
-    this.div_ = div;
 
-    var panes = this.getPanes();
-    panes.overlayMouseTarget.appendChild(div);
-
-    this.paper = Raphael(div, nePoint.x, swPoint.y);
-    var overlayProjection = this.getProjection();
-    for(var i = 0, svgMarker; i < this.data_.length; i++) {
-        svgMarker = new SVGMarker( this.data_[i], this.paper);
-        svgMarker.applyProjection(overlayProjection);
-        this.markers.push(svgMarker);
-    }
-
-    this.redrawlisteners = [];
-    this.redrawlisteners.push( this.map_.addListener('zoom_changed', this.redraw.bind(this)) );
-    this.redrawlisteners.push( this.map_.addListener('drag', this.redraw.bind(this)) );
-    this.redrawlisteners.push( this.map_.addListener('bounds_changed', this.redraw.bind(this)) );
-    this.redrawlisteners.push( this.map_.addListener('center_changed', this.redraw.bind(this)) );
-    this.redrawlisteners.push( this.map_.addListener('resize', this.redraw.bind(this)) );
-
+RaphaelOverlayView.prototype.initEventListeners_ = function() {
+  this.redrawlisteners = [];
+  this.redrawlisteners.push( this.map_.addListener('zoom_changed', this.draw.bind(this)) );
+  this.redrawlisteners.push( this.map_.addListener('drag', this.draw.bind(this)) );
+  this.redrawlisteners.push( this.map_.addListener('bounds_changed', this.draw.bind(this)) );
+  this.redrawlisteners.push( this.map_.addListener('center_changed', this.draw.bind(this)) );
+  this.redrawlisteners.push( this.map_.addListener('resize', this.draw.bind(this)) );
 };
-RaphaelOverlayView.prototype.fixLayout = function() {
-    this.div_.classList.add('svg-overlay-container');
-    this.div_.style.width = '100%';
-    this.div_.left = '0px';
-    this.div_.top = '0px';
 
-};
 RaphaelOverlayView.prototype.onAdd = function() {
-    if(this.isOverlayInit == false) {
-        this.initOverlay();
-    } else {
-        this.redraw();
-    }
-};
+  var self = this;
+  var div = document.createElement('div');
+  div.classList.add('svg-overlay-container');
+  div.style.borderStyle = 'none';
+  div.style.borderWidth = '0px';
+  div.style.position = 'absolute';
+  div.style.width = '100%';
+  div.style.height = '100%';
+  this.div_ = div;
+  var panes = this.getPanes();
+  panes.overlayMouseTarget.appendChild(div);
 
-RaphaelOverlayView.prototype.redraw = function() {
-    this.fixLayout();
-    var overlayProjection = this.getProjection();
-    for(var i = 0; i < this.markers.length; i++) {
-        this.markers[i].applyProjection(overlayProjection);
-    }
+  this.initEventListeners_();
 };
 
 RaphaelOverlayView.prototype.draw = function() {
-    this.redraw();
+    //this.fixLayout();
+    var self = this;
+    var overlayProjection = this.getProjection();
+    this.bounds_ = this.getMap().getBounds();
+    var sw = overlayProjection.fromLatLngToDivPixel(this.bounds_.getSouthWest());
+    var ne = overlayProjection.fromLatLngToDivPixel(this.bounds_.getNorthEast());
+
+    //mover overlay div to top left of map and full width and height:
+    this.div_.style.left = sw.x + 'px';
+    this.div_.style.top = ne.y + 'px';
+    this.div_.style.width = (ne.x - sw.x) + 'px';
+    this.div_.style.height = (sw.y - ne.y) + 'px';
+    if(this.paper == null) {
+      //instantiate Raphael here with values from the projection, which
+      //isnt guaranteed to be set prior to maps invoking draw
+      this.paper = Raphael(this.div_, ne.x, sw.y);
+
+      this.data_.forEach(function(markerData) {
+        var svgMarker = new SVGMarker( markerData, self.paper);
+        self.markers.push(svgMarker);
+      });
+    }
+
+
+    this.markers.forEach(function(marker) {
+      marker.applyProjection(overlayProjection, sw.x, ne.y);
+    })
 };
 
 RaphaelOverlayView.prototype.onRemove = function() {
     this.div_.parentNode.removeChild(this.div_);
     this.div_ = null;
-    for(var i = 0; i < this.redrawlisteners.length; i++) {
-        var listener = this.redrawlisteners[i];
-        google.maps.event.removeListener(listener);
-    }
+    var self = this;
+    this.redrawlisteners.forEach(function(listener) {
+      google.maps.event.removeListener(listener);
+    });
 };
 
 
@@ -200,10 +199,17 @@ SVGMarker = function(data, paper) {
     this.set.mouseover(this.onMouseOver.bind(this));
     this.set.mouseout(this.onMouseOut.bind(this));
 };
-SVGMarker.prototype.applyProjection = function(projection) {
+
+
+/**
+Places the svg elements at the x,y coordinates indicated by its Lat/Lng coordinates,
+offset by the amount the overlay div was shifted to fill the map.
+*/
+SVGMarker.prototype.applyProjection = function(projection, offsetLeft, offsetTop) {
     var point = projection.fromLatLngToDivPixel(this.data_.geometry.location);
-    this.set.transform('t' + point.x + ',' + point.y );
+    this.set.transform('t' + (point.x - offsetLeft) + ',' + (point.y - offsetTop));
 };
+
 SVGMarker.prototype.onMouseOver = function() {
     this.circle.animate(circleFill_over, 111, 'elastic');
     this.label.show();
@@ -225,11 +231,4 @@ SVGMarker.prototype.onMouseOut = function() {
     });
 };
 
-var busIcon = {
-    width:22,
-    height:26,
-    d:"M15.976,0.881C15.915,0.388,15.51,0,15,0H7C6.49,0,6.085,0.388,6.024,0.881C0.009,3.318,0,10,0,10v13c0,0.553,0.447,1,1,1 h1c0,1.104,0.896,2,2,2s2-0.896,2-2h10c0,1.104,0.896,2,2,2s2-0.896,2-2h1c0.553,0,1-0.447,1-1V10 C22,10,21.992,3.318,15.976,0.881z M8,2h6c0.553,0,1,0.448,1,1c0,0.553-0.447,1-1,1H8C7.447,4,7,3.553,7,3C7,2.448,7.447,2,8,2z M4.5,21C3.672,21,3,20.328,3,19.5S3.672,18,4.5,18S6,18.672,6,19.5S5.328,21,4.5,21z M17.5,21c-0.828,0-1.5-0.672-1.5-1.5 s0.672-1.5,1.5-1.5s1.5,0.672,1.5,1.5S18.328,21,17.5,21z M20,13.182C20,13.634,19.634,14,19.182,14H2.818 C2.366,14,2,13.634,2,13.182c0,0,0-2.182,0-2C2,8,2,6,11,6s9,2,9,5.182C20,11,20,13.182,20,13.182z"
-};
-
-jQuery( document ).ready( setupMapRaphael );
-
+document.addEventListener("DOMContentLoaded", setupMapRaphael);

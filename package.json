@@ -1,0 +1,22 @@
+{
+  "name": "google-maps-svg-custom-overlay",
+  "version": "2.0.0",
+  "description": "Implementing SVG markers in a custom google maps overlay with Raphael.js",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sammieedwards/google-maps-svg-custom-overlay.git"
+  },
+  "author": "Sam Edwards",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sammieedwards/google-maps-svg-custom-overlay/issues"
+  },
+  "homepage": "https://github.com/sammieedwards/google-maps-svg-custom-overlay#readme",
+  "dependencies": {
+    "raphael": "^2.2.7"
+  }
+}
